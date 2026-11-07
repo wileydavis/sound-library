@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Sound Library</title>
   <meta name="robots" content="noindex, nofollow">
+  <link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
   <link rel="stylesheet" href="/app.css">
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' fill='%23111'/><path d='M1 8h2l1-4 2 8 2-10 2 12 2-7 1 1h2' stroke='%23e8c547' fill='none'/></svg>">
@@ -26,6 +27,10 @@
         <input id="q" type="search" placeholder="Search titles, tags, places, people — and what was said" autocomplete="off" autofocus>
         <select id="f-type"><option value="">All types</option></select>
         <select id="f-tag"><option value="">Any tag</option></select>
+        <div class="seg" id="view-toggle">
+          <button data-view="list" class="on">List</button>
+          <button data-view="map">Map</button>
+        </div>
         <select id="f-sort">
           <option value="recent">Newest added</option>
           <option value="recorded">Recorded date</option>
@@ -33,6 +38,11 @@
           <option value="shortest">Shortest</option>
           <option value="longest">Longest</option>
         </select>
+      </div>
+      <div id="map-wrap" hidden>
+        <div id="map"></div>
+        <label class="opt"><input type="checkbox" id="map-filter" checked><span>Only list sounds in the map view</span></label>
+        <span id="map-note" class="muted small"></span>
       </div>
       <div class="selbar">
         <label class="opt"><input type="checkbox" id="sel-all"><span>Select all</span></label>
@@ -73,6 +83,7 @@
   </main>
 
   <dialog id="edit-dialog"></dialog>
+  <script src="/vendor/leaflet/leaflet.js"></script>
   <script type="module" src="/js/main.js"></script>
 </body>
 </html>

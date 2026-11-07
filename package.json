@@ -9,7 +9,7 @@
     "db:local": "wrangler d1 execute sound-library -c wrangler.dev.jsonc --local --file=schema.sql",
     "db:remote": "wrangler d1 execute sound-library --remote --file=schema.sql",
     "deploy": "wrangler deploy",
-    "test": "node test/modules.test.mjs && node test/slate.test.mjs && node test/auth.test.mjs"
+    "test": "node test/modules.test.mjs && node test/slate.test.mjs && node test/auth.test.mjs && node test/denoise.test.mjs"
   },
   "devDependencies": {
     "wrangler": "^4.158.0"

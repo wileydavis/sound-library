@@ -256,8 +256,9 @@ async function serveFile(request, env, url) {
   headers.set('cache-control', 'private, max-age=3600');
   const name = url.searchParams.get('name');
   if (url.searchParams.get('dl')) {
-    const fname = (name || key.split('/').pop()).replace(/["\\\r\n]/g, '');
-    headers.set('content-disposition', `attachment; filename="${fname}"`);
+    const fname = (name || key.split('/').pop()).replace(/[\x00-\x1f"\\/]/g, '').trim() || 'download';
+    const ascii = fname.normalize('NFKD').replace(/[^\x20-\x7e]/g, '_');
+    headers.set('content-disposition', `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(fname)}`);
   }
   if (request.method === 'HEAD' || !obj.body) {
     headers.set('content-length', String(obj.size));
@@ -293,6 +294,7 @@ const FIELDS = [
 ];
 const EDITABLE = ['recorded_at', 'title', 'type', 'tags', 'description', 'location', 'lat', 'lon', 'location_words', 'people', 'release_status', 'notes'];
 const LIST_COLS = FIELDS.filter((f) => f !== 'transcript_json' && f !== 'transcript');
+const LITE_COLS = ['id', 'title', 'type', 'recorded_at', 'location', 'lat', 'lon', 'duration', 'clip_key', 'tags'];
 
 async function createItem(request, env) {
   const item = await request.json();
@@ -363,7 +365,8 @@ async function search(env, url) {
   const where = [];
   const binds = [];
   let from = 'items i';
-  let select = LIST_COLS.map((c) => `i.${c}`).join(', ');
+  const cols = url.searchParams.get('lite') ? LITE_COLS : LIST_COLS;
+  let select = cols.map((c) => `i.${c}`).join(', ');
   let order = {
     recent: 'i.created_at DESC',
     recorded: 'i.recorded_at DESC, i.created_at DESC',
@@ -383,6 +386,14 @@ async function search(env, url) {
     }
   }
   if (type) { where.push('i.type = ?'); binds.push(type); }
+  if (url.searchParams.get('geo')) where.push('i.lat IS NOT NULL AND i.lon IS NOT NULL');
+  const bbox = (url.searchParams.get('bbox') || '').split(',').map(Number);
+  if (bbox.length === 4 && bbox.every(Number.isFinite)) {
+    const [w, s, e, n] = bbox;
+    where.push('i.lat BETWEEN ? AND ?'); binds.push(s, n);
+    if (w <= e) { where.push('i.lon BETWEEN ? AND ?'); binds.push(w, e); }
+    else { where.push('(i.lon >= ? OR i.lon <= ?)'); binds.push(w, e); } // view crosses the date line
+  }
   if (tag) { where.push(`(', ' || i.tags || ', ') LIKE ?`); binds.push(`%, ${tag}, %`); }
 
   const sql = `SELECT ${select} FROM ${from} ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY ${order} LIMIT ? OFFSET ?`;

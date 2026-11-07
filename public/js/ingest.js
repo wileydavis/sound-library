@@ -4,6 +4,7 @@ import { parseWav, encodeWav } from './wav.js';
 import * as dsp from './dsp.js';
 import { api, uploadBlob } from './api.js';
 import { parseSlate, stripLocation, heuristicMeta, guessType, recordedDate } from './slate.js';
+import { resolveAuto } from './clip.js';
 import { findLocationInText, decodeWords } from './geowords.js';
 import { $, h, fmtDur, fmtDb, fmtSize, fmtRate, slug, shortId, sha256Hex, drawWave, toast, TYPES } from './util.js';
 
@@ -11,7 +12,7 @@ const jobs = [];
 let analyzeChain = Promise.resolve();
 let uploadChain = Promise.resolve();
 const PREFS_KEY = 'sl.ingest.prefs';
-const prefs = Object.assign({ highpass: 40, normalize: 'peak', fadeIn: 5, fadeOut: 20, format: '24', trim: false }, safeJson(localStorage.getItem(PREFS_KEY)));
+const prefs = Object.assign({ highpass: 40, denoise: 'auto', normalize: 'auto', fadeIn: 5, fadeOut: 20, format: '24', trim: false }, safeJson(localStorage.getItem(PREFS_KEY)));
 
 // MixPre fills the bext description with machine fields (sSPEED=…, sTAKE=…); keep only human text.
 function humanBext(desc) {
@@ -72,7 +73,7 @@ async function analyze(job) {
   job.form.recorded_at = recordedDate(w.bext, job.file.lastModified);
   const ix = w.ixml || {};
   job.options = {
-    cutSlate: false, slateEnd: 0, trim: prefs.trim, highpass: prefs.highpass, normalize: prefs.normalize,
+    cutSlate: false, slateEnd: 0, trim: prefs.trim, highpass: prefs.highpass, denoise: prefs.denoise, normalize: prefs.normalize,
     fadeIn: prefs.fadeIn, fadeOut: prefs.fadeOut, format: prefs.format, channels: 'all',
   };
   job.form.title = (ix.scene || job.file.name.replace(/\.[^.]+$/, '')).toLowerCase().replace(/[_]+/g, ' ');
@@ -192,56 +193,100 @@ function queueUpload(job) {
   uploadChain = uploadChain.then(() => processAndUpload(job)).catch((e) => fail(job, e));
 }
 
-function buildClip(job) {
-  const w = job.audio;
-  const o = job.options;
-  const sr = w.sampleRate;
-  // Channel selection
-  let chans;
-  if (o.channels === 'mono') chans = [dsp.mono(w.data)];
-  else if (o.channels.startsWith('t')) chans = [w.data[Number(o.channels.slice(1))]];
-  else chans = w.data;
-  const startFrame = o.cutSlate ? Math.round(o.slateEnd * sr) : 0;
-  chans = dsp.cut(chans, startFrame, chans[0].length); // copies — originals untouched
-  if (o.trim) {
-    const b = dsp.findSoundBounds(chans, sr);
-    chans = dsp.cut(chans, b.start, b.end);
+// ---- clip rendering in a background worker
+let worker = null;
+const pending = new Map();
+function getWorker() {
+  if (!worker) {
+    worker = new Worker('/js/clip.worker.js', { type: 'module' });
+    worker.onmessage = (e) => {
+      const p = pending.get(e.data.id);
+      if (!p) return;
+      if (e.data.progress !== undefined) { p.onProgress(e.data.progress); return; }
+      pending.delete(e.data.id);
+      e.data.error ? p.reject(new Error(e.data.error)) : p.resolve(e.data);
+    };
+    worker.onerror = (e) => { for (const p of pending.values()) p.reject(new Error(e.message || 'clip worker failed')); pending.clear(); worker = null; };
   }
-  if (o.highpass) dsp.highpass(chans, sr, Number(o.highpass));
-  if (o.normalize === 'peak') dsp.normalizePeak(chans, -1);
-  else if (o.normalize === 'loudness') dsp.normalizeLoudness(chans, sr, -18, -1);
-  else if (dsp.peakDb(chans) > 0 && o.format !== 'float') dsp.normalizePeak(chans, -0.1); // never clip a 24-bit file
-  dsp.fade(chans, sr, Number(o.fadeIn) || 0, Number(o.fadeOut) || 0);
-  return { chans, startFrame };
+  return worker;
+}
+
+function clipMeta(job) {
+  const f = job.form, w = job.audio;
+  const date = (f.recorded_at || '').slice(0, 10) || new Date().toISOString().slice(0, 10);
+  return {
+    date,
+    bext: {
+      description: [f.title, f.description].filter(Boolean).join(' - ').slice(0, 255),
+      originator: 'Sound Library', originatorReference: job.id,
+      originationDate: date, originationTime: (f.recorded_at || '').slice(11, 19),
+      timeReference: w.bext?.timeReference || 0,
+    },
+    info: { INAM: f.title, ICMT: f.description, IKEY: String(f.tags || ''), ICRD: date, IART: f.people },
+  };
+}
+
+/** Render (or reuse) the cleaned clip for the job's current options and metadata. */
+function renderClip(job, onProgress = () => {}) {
+  const meta = clipMeta(job);
+  const key = JSON.stringify([job.options, job.form.type, meta]);
+  if (job.clip && job.clip.key === key) return job.clip.promise;
+  const id = shortId();
+  const promise = new Promise((resolve, reject) => {
+    pending.set(id, { resolve, reject, onProgress });
+    getWorker().postMessage({ id, channels: job.audio.data, sr: job.audio.sampleRate, options: job.options, type: job.form.type, bext: meta.bext, info: meta.info });
+  }).then((r) => ({ ...r, blob: new Blob([r.buf], { type: 'audio/wav' }), date: meta.date }));
+  promise.catch(() => { if (job.clip && job.clip.key === key) job.clip = null; });
+  job.clip = { key, promise };
+  return promise;
+}
+
+async function previewClip(job, btn) {
+  const audio = job.el.querySelector('audio.preview');
+  if (!audio.paused && audio.dataset.key === job.clip?.key) { audio.pause(); return; }
+  btn.disabled = true;
+  btn.textContent = 'Cleaning… 0%';
+  try {
+    const r = await renderClip(job, (f) => { btn.textContent = `Cleaning… ${Math.round(f * 100)}%`; });
+    job.lastClip = r;
+    if (audio.dataset.key !== job.clip.key) {
+      if (audio.src) URL.revokeObjectURL(audio.src);
+      audio.src = URL.createObjectURL(r.blob);
+      audio.dataset.key = job.clip.key;
+    }
+    renderClipStats(job);
+    audio.play();
+  } catch (e) {
+    toast(e.message, 'err');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '▶ Preview cleaned';
+  }
+}
+
+function renderClipStats(job) {
+  const el = job.el && job.el.querySelector('.clipstats');
+  const r = job.lastClip;
+  if (!el || !r) return;
+  const g = Number.isFinite(r.gainDb) && Math.abs(r.gainDb) >= 0.1 ? ` · gain ${r.gainDb > 0 ? '+' : ''}${r.gainDb.toFixed(1)} dB` : '';
+  el.textContent = `background ${fmtDb(r.floorBefore)} → ${fmtDb(r.floorCleaned)}${g} · ${fmtDb(r.lufs, 'LUFS')} · ${fmtDur(r.frames / job.audio.sampleRate)}`;
 }
 
 async function processAndUpload(job) {
   if (job.removed) return;
   const f = job.form, w = job.audio, o = job.options;
-  setStatus(job, 'processing', 'Processing…');
+  setStatus(job, 'processing', 'Cleaning…');
   renderJob(job);
-  await new Promise((r) => setTimeout(r, 30)); // let the UI paint
 
   if (f.type === 'voice') await transcribeFull(job);
-  const { chans, startFrame } = buildClip(job);
+  const r = await renderClip(job, (p) => { job.statusText = `Cleaning… ${Math.round(p * 100)}%`; const b = job.el?.querySelector('.badge'); if (b) b.textContent = job.statusText; });
+  job.lastClip = r;
   const sr = w.sampleRate;
-  const lufs = dsp.integratedLoudness(chans, sr);
-  const peak = dsp.peakDb(chans);
-  const date = (f.recorded_at || '').slice(0, 10) || new Date().toISOString().slice(0, 10);
+  const { startFrame, lufs, peak, peaks, date } = r;
   const filename = `${date}_${slug(f.title)}_${job.id.slice(0, 4)}.wav`;
   const tags = String(f.tags || '');
-  const clipBuf = encodeWav(chans, sr, {
-    float: o.format === 'float', bitDepth: 24,
-    bext: {
-      description: [f.title, f.description].filter(Boolean).join(' - ').slice(0, 255),
-      originator: 'Sound Library', originatorReference: job.id,
-      originationDate: date, originationTime: (f.recorded_at || '').slice(11, 19),
-      timeReference: (w.bext?.timeReference || 0) + startFrame, loudness: lufs, truePeak: peak,
-    },
-    info: { INAM: f.title, ICMT: f.description, IKEY: tags, ICRD: date, IART: f.people },
-  });
-  const clipBlob = new Blob([clipBuf], { type: 'audio/wav' });
-  const peaks = dsp.waveformPeaks(chans, 600);
+  const clipBlob = r.blob;
+  const chans = { length: r.nch, frames: r.frames };
 
   // Transcript times are relative to the original; shift them to the clip.
   const offset = startFrame / sr;
@@ -270,8 +315,8 @@ async function processAndUpload(job) {
     notes: f.notes || '', slate: job.slate?.text || '', transcript: transcript.map((s) => s.text).join(' '),
     transcript_json: transcript, filename, clip_key: keys.clip, original_key: keys.original, original_name: origName,
     sha256: job.sha256, sample_rate: sr, channels: chans.length, bit_depth: o.format === 'float' ? 32 : 24,
-    duration: chans[0].length / sr, original_duration: w.duration, peak_db: round(peak), lufs: round(lufs),
-    noise_floor_db: round(job.analysis.floor), processing: { ...o, slateCutSec: offset },
+    duration: chans.frames / sr, original_duration: w.duration, peak_db: round(peak), lufs: round(lufs),
+    noise_floor_db: round(r.floorAfter), processing: { ...o, resolved: { denoise: r.denoiseLevel, normalize: r.normalize }, slateCutSec: offset, floorBefore: round(r.floorBefore) },
     source_meta: { bext: w.bext, ixml: ix, info: w.info, sampleRate: sr, bitDepth: w.bitDepth, float: w.isFloat, channels: w.channels, trackNames: ix.tracks || [] },
     peaks, clip_size: clipBlob.size, original_size: job.file.size,
   };
@@ -279,6 +324,7 @@ async function processAndUpload(job) {
   await api.post('/api/items', item);
 
   job.audio = null; // free memory
+  job.clip = null;
   job.result = item;
   setStatus(job, 'done', 'In the library');
   renderJob(job);
@@ -448,18 +494,24 @@ function renderJob(job) {
   const o = job.options;
   const opt = (key, label, input, persist = true) => {
     const read = () => (input.type === 'checkbox' ? input.checked : input.type === 'number' ? Number(input.value) : input.value);
-    input.addEventListener('change', () => { o[key] = read(); if (persist) savePrefs({ [key]: o[key] }); drawJobWave(job); });
+    input.addEventListener('change', () => {
+      o[key] = read(); if (persist) savePrefs({ [key]: o[key] });
+      drawJobWave(job);
+      const sum = job.el.querySelector('details.options summary');
+      if (sum) sum.textContent = 'Cleanup: ' + describeOptions(o, job.form.type);
+    });
     input.disabled = !editable;
     return h('label', { class: 'opt' }, input, h('span', {}, label));
   };
   const tracks = (w.ixml?.tracks || []);
   el.append(h('details', { class: 'options', open: false },
-    h('summary', {}, 'Cleanup: ', describeOptions(o)),
+    h('summary', {}, 'Cleanup: ' + describeOptions(o, f.type)),
     h('div', { class: 'opts' },
       opt('cutSlate', `Cut slate (first ${o.slateEnd.toFixed(1)} s)`, h('input', { type: 'checkbox', checked: o.cutSlate }), false),
       opt('trim', 'Trim silence at head/tail', h('input', { type: 'checkbox', checked: o.trim })),
       opt('highpass', 'High-pass', h('select', {}, [[0, 'off'], [30, '30 Hz'], [40, '40 Hz'], [80, '80 Hz'], [120, '120 Hz']].map(([v, l]) => h('option', { value: v, selected: Number(o.highpass) === v }, l)))),
-      opt('normalize', 'Normalize', h('select', {}, [['peak', 'peak −1 dBFS'], ['loudness', '−18 LUFS (peak ≤ −1)'], ['off', 'off']].map(([v, l]) => h('option', { value: v, selected: o.normalize === v }, l)))),
+      opt('denoise', 'Noise reduction', h('select', {}, [['auto', `auto (${resolveAuto(o, f.type).denoiseLevel})`], ['off', 'off'], ['light', 'light (−8 dB)'], ['medium', 'medium (−14 dB)'], ['strong', 'strong (−22 dB)']].map(([v, l]) => h('option', { value: v, selected: o.denoise === v }, l)))),
+      opt('normalize', 'Normalize', h('select', {}, [['auto', `auto (${resolveAuto(o, f.type).normalize === 'loudness' ? '−18 LUFS' : 'peak −1'})`], ['peak', 'peak −1 dBFS'], ['loudness', '−18 LUFS (peak ≤ −1)'], ['off', 'off']].map(([v, l]) => h('option', { value: v, selected: o.normalize === v }, l)))),
       opt('fadeIn', 'fade in ms', h('input', { type: 'number', min: 0, max: 5000, value: o.fadeIn })),
       opt('fadeOut', 'fade out ms', h('input', { type: 'number', min: 0, max: 10000, value: o.fadeOut })),
       opt('format', 'Clip format', h('select', {}, [['24', '24-bit'], ['float', '32-bit float']].map(([v, l]) => h('option', { value: v, selected: o.format === v }, l)))),
@@ -468,18 +520,25 @@ function renderJob(job) {
         h('option', { value: 'mono', selected: o.channels === 'mono' }, 'mix to mono'),
         Array.from({ length: w.channels }, (_, i) => h('option', { value: `t${i}`, selected: o.channels === `t${i}` }, `track ${i + 1}${tracks[i] ? ` (${tracks[i]})` : ''}`))), false),
     ),
-    h('p', { class: 'muted small' }, 'The original file is uploaded untouched; these only shape the clip.'),
+    h('p', { class: 'muted small' }, 'The original file is uploaded untouched; these only shape the clip. Noise reduction learns the steady background from the quietest moments and turns it down without muting it.'),
   ));
 
+  const prevBtn = h('button', { class: 'ghost', disabled: !editable, onclick: (e) => previewClip(job, e.currentTarget) }, '▶ Preview cleaned');
   el.append(h('footer', {},
     h('button', { class: 'primary', disabled: job.status !== 'ready' || job.duplicate, onclick: () => queueUpload(job) }, 'Process & upload'),
+    prevBtn,
+    h('span', { class: 'clipstats muted small' }),
+    h('audio', { class: 'preview', preload: 'none' }),
     h('div', { class: 'progress' }, h('i')),
   ));
+  renderClipStats(job);
   updateCounts();
 }
 
-function describeOptions(o) {
+function describeOptions(o, type) {
+  const r = resolveAuto(o, type);
   return [o.cutSlate && 'cut slate', o.trim && 'trim', o.highpass ? `HPF ${o.highpass}` : null,
-    o.normalize === 'peak' ? 'peak −1' : o.normalize === 'loudness' ? '−18 LUFS' : null,
+    r.denoiseLevel !== 'off' ? `denoise ${r.denoiseLevel}` : null,
+    r.normalize === 'peak' ? 'peak −1' : r.normalize === 'loudness' ? '−18 LUFS' : null,
     o.format === 'float' ? '32f' : '24-bit', o.channels !== 'all' ? o.channels.replace(/^t(\d+)/, (_, n) => `track ${+n + 1}`) : null].filter(Boolean).join(' · ');
 }
