@@ -32,8 +32,8 @@
 
   "vars": {
     // Fill these in after creating the Access application (README step 5).
-    "ACCESS_TEAM_DOMAIN": "",
-    "ACCESS_AUD": "",
+    "ACCESS_TEAM_DOMAIN": "tiny-boat-3c4f.cloudflareaccess.com",
+    "ACCESS_AUD": "c9cb9aa86ad1181dd38de33a7f410da8a3f634db31c900145611d594b995e1f1",
     // Never set to "true" in production. Used only for local `wrangler dev`.
     "ALLOW_UNAUTHENTICATED": "false",
     "WHISPER_MODEL": "@cf/openai/whisper-large-v3-turbo",
