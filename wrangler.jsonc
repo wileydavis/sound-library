@@ -9,6 +9,7 @@
   // Only reachable through the custom domain, which sits behind Cloudflare Access.
   // (A workers.dev URL would bypass Access, so it stays off.)
   "workers_dev": false,
+  "preview_urls": false,
   "routes": [
     { "pattern": "library.drosaka.com", "custom_domain": true }
   ],
@@ -24,7 +25,7 @@
   ],
 
   "d1_databases": [
-    { "binding": "DB", "database_name": "sound-library", "database_id": "REPLACE_WITH_D1_ID" }
+    { "binding": "DB", "database_name": "sound-library", "database_id": "42e6e046-4279-4c6e-ba11-be1abd6a31e2" }
   ],
 
   "ai": { "binding": "AI" },
