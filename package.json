@@ -1,0 +1,19 @@
+{
+  "name": "sound-library",
+  "version": "1.0.0",
+  "directories": {
+    "test": "test"
+  },
+  "scripts": {
+    "dev": "wrangler dev -c wrangler.dev.jsonc --port 8787",
+    "db:local": "wrangler d1 execute sound-library -c wrangler.dev.jsonc --local --file=schema.sql",
+    "db:remote": "wrangler d1 execute sound-library --remote --file=schema.sql",
+    "deploy": "wrangler deploy",
+    "test": "node test/modules.test.mjs && node test/slate.test.mjs && node test/auth.test.mjs"
+  },
+  "devDependencies": {
+    "wrangler": "^4.158.0"
+  },
+  "private": true,
+  "type": "module"
+}

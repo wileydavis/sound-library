@@ -1,0 +1,41 @@
+{
+  // Sound Library — private field-recording catalog.
+  // Deploy: see README.md
+  "name": "sound-library",
+  "main": "src/worker.js",
+  "compatibility_date": "2026-10-01",
+  "compatibility_flags": ["nodejs_compat"],
+
+  // Only reachable through the custom domain, which sits behind Cloudflare Access.
+  // (A workers.dev URL would bypass Access, so it stays off.)
+  "workers_dev": false,
+  "routes": [
+    { "pattern": "library.drosaka.com", "custom_domain": true }
+  ],
+
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*"]
+  },
+
+  "r2_buckets": [
+    { "binding": "BUCKET", "bucket_name": "sound-library" }
+  ],
+
+  "d1_databases": [
+    { "binding": "DB", "database_name": "sound-library", "database_id": "REPLACE_WITH_D1_ID" }
+  ],
+
+  "ai": { "binding": "AI" },
+
+  "vars": {
+    // Fill these in after creating the Access application (README step 5).
+    "ACCESS_TEAM_DOMAIN": "",
+    "ACCESS_AUD": "",
+    // Never set to "true" in production. Used only for local `wrangler dev`.
+    "ALLOW_UNAUTHENTICATED": "false",
+    "WHISPER_MODEL": "@cf/openai/whisper-large-v3-turbo",
+    "LLM_MODEL": "@cf/meta/llama-3.1-8b-instruct"
+  }
+}

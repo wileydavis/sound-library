@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sound Library</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="stylesheet" href="/app.css">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' fill='%23111'/><path d='M1 8h2l1-4 2 8 2-10 2 12 2-7 1 1h2' stroke='%23e8c547' fill='none'/></svg>">
+</head>
+<body>
+  <header class="bar">
+    <h1>Sound Library</h1>
+    <nav>
+      <button class="tab active" data-tab="library">Library</button>
+      <button class="tab" data-tab="add">Add</button>
+      <a class="tab" href="/where" title="Open on your phone in the field">Location words ↗</a>
+    </nav>
+  </header>
+
+  <main>
+    <!-- ================= LIBRARY ================= -->
+    <section id="tab-library">
+      <div class="search">
+        <input id="q" type="search" placeholder="Search titles, tags, places, people — and what was said" autocomplete="off" autofocus>
+        <select id="f-type"><option value="">All types</option></select>
+        <select id="f-tag"><option value="">Any tag</option></select>
+        <select id="f-sort">
+          <option value="recent">Newest added</option>
+          <option value="recorded">Recorded date</option>
+          <option value="title">Title A–Z</option>
+          <option value="shortest">Shortest</option>
+          <option value="longest">Longest</option>
+        </select>
+      </div>
+      <div class="selbar">
+        <label class="opt"><input type="checkbox" id="sel-all"><span>Select all</span></label>
+        <span id="sel-info" class="muted"></span>
+        <span class="spacer"></span>
+        <label class="opt"><input type="checkbox" id="dl-originals"><span>include originals</span></label>
+        <button id="dl-zip" disabled>Download .zip</button>
+        <button id="dl-folder" disabled>Save to folder…</button>
+        <span id="dl-status" class="muted"></span>
+        <span id="count" class="muted"></span>
+      </div>
+      <div id="results"></div>
+      <button id="more" class="ghost" hidden>Load more</button>
+    </section>
+
+    <!-- ================= ADD ================= -->
+    <section id="tab-add" hidden>
+      <div id="drop" tabindex="0">
+        <strong>Drop recordings here</strong>
+        <span>or click to choose · WAV/BWF from the MixPre (any rate, 24-bit or 32-bit float), also AIFF, FLAC, MP3, M4A</span>
+        <input id="file-input" type="file" accept="audio/*,.wav,.bwf,.aif,.aiff,.flac,.mp3,.m4a,.caf" multiple hidden>
+      </div>
+      <p class="hint muted">Tip: start each take by saying a slate — what it is, anything worth knowing — then
+        “location” and the four words from your phone. The slate becomes the title, tags and description and is cut from the clip.</p>
+
+      <div id="batch" class="batch" hidden>
+        <span>Apply to all files below:</span>
+        <input id="batch-location" placeholder="location">
+        <input id="batch-tags" placeholder="add tags">
+        <input id="batch-people" placeholder="people">
+        <input id="batch-date" type="date">
+        <button id="batch-apply">Apply</button>
+        <span class="spacer"></span>
+        <button id="upload-all" class="primary" disabled>Upload all ready</button>
+      </div>
+      <div id="jobs"></div>
+    </section>
+  </main>
+
+  <dialog id="edit-dialog"></dialog>
+  <script type="module" src="/js/main.js"></script>
+</body>
+</html>
