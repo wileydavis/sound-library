@@ -54,7 +54,13 @@
     nothing is sent anywhere. Wait for <b style="color:var(--ok)">good</b> accuracy before reading them out.</p>
   <p class="offline" id="net"></p>
 
+  <script>
+    // If the page script can't load (e.g. signed out), say so instead of hanging on "finding you".
+    window.addEventListener('error', (e) => { const el = document.getElementById('err'); if (el) el.textContent = 'Page error: ' + (e.message || 'a script failed to load') + ' — reload, and sign in again if asked.'; }, true);
+    setTimeout(() => { if (!window.__whereReady) { const el = document.getElementById('err'); if (el && !el.textContent) el.textContent = 'The page script didn’t start — reload; if you’re asked to sign in, do that, then reload again.'; } }, 4000);
+  </script>
   <script type="module">
+    window.__whereReady = true;
     import { encodeLocation } from '/js/geowords.js';
     const $ = (id) => document.getElementById(id);
     let last = null;
@@ -72,12 +78,31 @@
       $('err').textContent = '';
     }
 
+    const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
+    let started = 0, ticker = null;
+    function onErr(e) {
+      if (last) return; // keep showing the last good fix
+      $('err').textContent = e.code === 1
+        ? (isIOS ? 'Location is blocked. iPhone Settings → Privacy & Security → Location Services → Chrome (or Safari Websites) → While Using, and turn on Precise Location.' : 'Location permission is off for this site — allow it in browser settings.')
+        : `No fix yet (${e.message || 'code ' + e.code}). Keep waiting, or step outside.`;
+    }
     function start() {
+      if (!window.isSecureContext) { $('err').textContent = 'Needs https.'; return; }
       if (!('geolocation' in navigator)) { $('err').textContent = 'This browser has no location access.'; return; }
       if (watch !== null) navigator.geolocation.clearWatch(watch);
-      watch = navigator.geolocation.watchPosition(show, (e) => {
-        $('err').textContent = e.code === 1 ? 'Location permission is off for this site — allow it in browser settings.' : `Can't get a fix yet (${e.message}). Try outside, or wait.`;
-      }, { enableHighAccuracy: true, maximumAge: 2000, timeout: 30000 });
+      started = Date.now();
+      // A quick coarse fix first (iOS sometimes never answers a watch until asked directly), then keep refining.
+      navigator.geolocation.getCurrentPosition(show, onErr, { enableHighAccuracy: false, maximumAge: 60000, timeout: 15000 });
+      watch = navigator.geolocation.watchPosition(show, onErr, { enableHighAccuracy: true, maximumAge: 2000, timeout: 30000 });
+      clearInterval(ticker);
+      ticker = setInterval(() => {
+        if (last) { clearInterval(ticker); return; }
+        const sec = Math.round((Date.now() - started) / 1000);
+        $('acc').textContent = `waiting for location… ${sec}s`;
+        if (sec >= 12 && !$('err').textContent) $('err').textContent = isIOS
+          ? 'Still nothing. Check iPhone Settings → Privacy & Security → Location Services: it must be on, and Chrome set to “While Using” with Precise Location on. Then tap Refresh.'
+          : 'Still nothing. Check that location is on for this device and browser, then tap Refresh.';
+      }, 1000);
     }
 
     const LOG = 'sl.where.log';
@@ -99,7 +124,7 @@
       renderLog();
       navigator.vibrate?.(30);
     };
-    $('refresh').onclick = start;
+    $('refresh').onclick = () => { $('err').textContent = ''; start(); };
     $('copy').onclick = () => last && navigator.clipboard?.writeText(`location ${last.words.join(' ')}`);
 
     // Keep the screen on while this page is open.

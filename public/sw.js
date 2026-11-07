@@ -1,6 +1,6 @@
 // Keeps the location-words page working offline in the field.
 // Only these static files are cached; the API and audio always go to the network.
-const CACHE = 'sl-v1';
+const CACHE = 'sl-v2';
 const OFFLINE = ['/where', '/js/geowords.js', '/manifest.webmanifest'];
 
 self.addEventListener('install', (e) => {
