@@ -10,7 +10,7 @@ library lets you preview, edit and download.
 - **Library**: search titles, tags, places, people *and what was said*; preview; edit; download one,
   a .zip, or *Save to folder…* straight into a folder Ableton browses (Chrome/Edge). Downloads are
   named after the title. **Map** view shows every located sound; moving the map filters the list.
-- **Location words** (`/where`, for your phone): four words that encode your GPS position to about 10 m.
+- **Location** tab: four words that encode your GPS position to about 10 m.
   It works offline. Say *"location"* and the four words in your slate.
 
 ## How a take should start
@@ -85,8 +85,8 @@ turned off for the same reason.
 
 ### 4. Phone
 
-Open `https://library.drosaka.com/where` on your phone once while you have signal, sign in, and
-*Add to Home Screen*. After that it opens and works with no signal. *Log this spot* keeps a list
+Open `https://library.drosaka.com` on your phone once while you have signal, sign in, and
+*Add to Home Screen*. The Location tab then works with no signal. *Log this spot* keeps a list
 of spots on the phone.
 
 ## Costs
@@ -110,7 +110,7 @@ src/worker.js          API: uploads (multipart above 90 MB), catalog + full-text
                        streaming with Range, transcription/description, Access verification
 schema.sql             D1 tables + FTS5 search index
 public/index.html      the app (Library + Add)
-public/where.html      phone page for location words (offline via sw.js)
+public/js/where.js     Location tab (offline via sw.js; /where redirects to it)
 public/js/wav.js       WAV/BWF/RF64 reader + writer (16/24/32-bit PCM, 32/64-bit float, bext, iXML, INFO)
 public/js/dsp.js       high-pass, LUFS (BS.1770-4), noise floor, trim, fades, normalize, waveform peaks
 public/js/denoise.js   spectral noise reduction (streaming STFT, shared mask across channels)

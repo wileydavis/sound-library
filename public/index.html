@@ -5,6 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Sound Library</title>
   <meta name="robots" content="noindex, nofollow">
+  <meta name="theme-color" content="#0d0d0d">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <link rel="apple-touch-icon" href="/icon.svg">
   <link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
   <link rel="stylesheet" href="/app.css">
   <link rel="manifest" href="/manifest.webmanifest">
@@ -16,7 +19,7 @@
     <nav>
       <button class="tab active" data-tab="library">Library</button>
       <button class="tab" data-tab="add">Add</button>
-      <a class="tab" href="/where" title="Open on your phone in the field">Location words ↗</a>
+      <button class="tab" data-tab="where">Location</button>
     </nav>
   </header>
 
@@ -79,6 +82,28 @@
         <button id="upload-all" class="primary" disabled>Upload all ready</button>
       </div>
       <div id="jobs"></div>
+    </section>
+
+    <!-- ================= LOCATION ================= -->
+    <section id="tab-where" hidden>
+      <div class="where">
+        <div class="say">Say into the recorder: “location …”</div>
+        <div id="w-words" class="stale"><span>finding</span><span>you…</span></div>
+        <div class="acc" id="w-acc"></div>
+        <div class="coords" id="w-coords"></div>
+        <div class="err" id="w-err"></div>
+        <div class="row">
+          <button class="primary" id="w-mark" disabled>Log this spot</button>
+          <button id="w-refresh">Refresh</button>
+          <button id="w-copy">Copy</button>
+        </div>
+        <h2>Logged spots</h2>
+        <ul id="w-log"></ul>
+        <p class="muted small">Works offline once the app has been opened with signal — add it to your Home Screen.
+          The four words encode your GPS to within about 10 m; nothing is sent anywhere.
+          Wait for <b class="good">good</b> accuracy before reading them out.</p>
+        <p class="muted small" id="w-net"></p>
+      </div>
     </section>
   </main>
 

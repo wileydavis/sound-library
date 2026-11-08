@@ -1,7 +1,7 @@
 {
   "name": "Sound Library",
   "short_name": "Sounds",
-  "start_url": "/where",
+  "start_url": "/#where",
   "display": "standalone",
   "background_color": "#0d0d0d",
   "theme_color": "#0d0d0d",

@@ -137,3 +137,29 @@ dialog footer { display: flex; gap: 8px; margin-top: 16px; }
 .leaflet-control-layers { background: #1a1a1a !important; color: var(--fg); border: 1px solid #333 !important; }
 .leaflet-bar a, .leaflet-bar a:hover { background: #1a1a1a; color: var(--fg); border-bottom-color: #333; }
 .leaflet-bar { border: 1px solid #333 !important; }
+
+/* ---------- location tab ---------- */
+.where { max-width: 640px; }
+.where .say { color: var(--dim); font-size: 13px; letter-spacing: .08em; text-transform: uppercase; }
+#w-words { margin: 10px 0 0; font: 700 clamp(34px, 11vw, 64px)/1.1 var(--mono); color: var(--acc); word-break: break-word; }
+#w-words span { display: block; }
+#w-words.stale { color: var(--dim); }
+.where .acc { margin-top: 14px; font-size: 15px; }
+.where b.good, .where .acc b.good { color: var(--ok); } .where .acc b.fair { color: var(--acc); } .where .acc b.poor { color: var(--bad); }
+.where .coords { color: var(--dim); font: 13px var(--mono); margin-top: 4px; }
+.where .err { margin-top: 12px; }
+.where .row { display: flex; gap: 10px; margin-top: 22px; flex-wrap: wrap; }
+.where .row button { padding: 12px 16px; border-radius: 10px; font-size: 15px; }
+.where h2 { font-size: 12px; color: var(--dim); text-transform: uppercase; letter-spacing: .08em; margin: 30px 0 6px; font-weight: 500; }
+#w-log { list-style: none; padding: 0; margin: 0 0 20px; font: 14px var(--mono); }
+#w-log li { padding: 8px 0; border-bottom: 1px solid #222; }
+#w-log time { color: var(--dim); margin-right: 8px; }
+@media (max-width: 640px) {
+  .bar { padding: 10px 14px; gap: 12px; padding-top: max(10px, env(safe-area-inset-top)); }
+  .bar h1 { display: none; }
+  .bar nav { flex: 1; justify-content: space-between; }
+  .bar nav .tab { flex: 1; padding: 8px 6px; }
+  main { padding: 16px 14px 60px; }
+  .search { flex-wrap: wrap; }
+  .search input[type=search] { flex-basis: 100%; }
+}
